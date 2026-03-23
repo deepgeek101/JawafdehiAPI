@@ -415,6 +415,8 @@ def test_published_cases_include_all_entity_fields(case_data):
     related_entities, locations) should be included in the API response.
     Validates: Requirements 6.3
     """
+    from cases.models import RelationshipType
+
     # Create and publish a case
     case = create_case_with_entities(**case_data)
     case.state = CaseState.PUBLISHED
@@ -441,8 +443,11 @@ def test_published_cases_include_all_entity_fields(case_data):
     assert isinstance(
         returned_case["alleged_entities"], list
     ), "alleged_entities should be a list"
+    
+    # Count alleged entities from unified system
+    alleged_count = case.get_entities_by_type(RelationshipType.ALLEGED).count()
     assert (
-        len(returned_case["alleged_entities"]) == case.alleged_entities.count()
+        len(returned_case["alleged_entities"]) == alleged_count
     ), "alleged_entities count should match"
 
     # Verify entity objects have required fields
@@ -452,9 +457,11 @@ def test_published_cases_include_all_entity_fields(case_data):
             "nes_id" in entity or "display_name" in entity
         ), "Entity should have nes_id or display_name"
 
-    if case.related_entities.count() > 0:
+    # Count related entities from unified system
+    related_count = case.get_entities_by_type(RelationshipType.RELATED).count()
+    if related_count > 0:
         assert (
-            len(returned_case["related_entities"]) == case.related_entities.count()
+            len(returned_case["related_entities"]) == related_count
         ), "related_entities count should match"
 
     if case.locations.count() > 0:

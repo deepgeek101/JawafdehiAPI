@@ -6,6 +6,9 @@ class CasesConfig(AppConfig):
     name = "cases"
 
     def ready(self):
+        """Import signals and register models with auditlog when app is ready."""
+        # Import signals to register them
+        import cases.signals  # noqa: F401
 
         # Register models with auditlog
         from auditlog.registry import auditlog

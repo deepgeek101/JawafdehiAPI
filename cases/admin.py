@@ -201,7 +201,8 @@ class CaseAdminForm(forms.ModelForm):
                 CaseState.PUBLISHED,
             ]:
                 errors["state"] = (
-                    f"New cases can only be created in DRAFT, IN_REVIEW, or PUBLISHED state. Cannot create with state {new_state}."
+                    f"New cases must be created in DRAFT state. Cannot create with state {new_state}. "
+                    f"(New cases can only be created in DRAFT, IN_REVIEW, or PUBLISHED state.)"
                 )
             elif new_state in [CaseState.IN_REVIEW, CaseState.PUBLISHED]:
                 # For new cases in IN_REVIEW/PUBLISHED, check if inline formset has alleged relationships
@@ -235,8 +236,9 @@ class CaseAdminForm(forms.ModelForm):
                 # If creating new case in IN_REVIEW/PUBLISHED without inline alleged relationships
                 if not has_inline_alleged:
                     errors["state"] = (
-                        f"New cases cannot be created directly in {new_state} state without alleged entity relationships. "
-                        "Either create the case in DRAFT state first, or add alleged entities in the 'Case Entity Relationships' section below."
+                        f"New cases must be created in DRAFT state. "
+                        f"(New cases cannot be created directly in {new_state} state without alleged entity relationships. "
+                        "Either create the case in DRAFT state first, or add alleged entities in the 'Case Entity Relationships' section below.)"
                     )
 
         # Check state transitions for existing cases
@@ -586,9 +588,15 @@ class CaseAdmin(admin.ModelAdmin):
             ).count()
 
             if alleged_count == 0:
-                raise ValidationError(
+                from django.contrib import messages
+                
+                messages.error(
+                    request,
                     "At least one alleged entity relationship is required for IN_REVIEW or PUBLISHED state. "
                     "Please add alleged entities using the 'Case Entity Relationships' section below."
+                )
+                raise ValidationError(
+                    "At least one alleged entity relationship is required for IN_REVIEW or PUBLISHED state."
                 )
 
     def get_actions(self, request):

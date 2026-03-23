@@ -220,7 +220,7 @@ class ListMySubmissionsView(APIView):
         queryset = (
             NESQueueItem.objects.filter(submitted_by=request.user)
             .select_related("submitted_by", "reviewed_by")
-            .order_by("-created_at")
+            .order_by("-created_at", "-id")
         )
 
         paginator = NESQueuePagination()

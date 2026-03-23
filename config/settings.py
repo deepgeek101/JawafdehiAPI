@@ -59,7 +59,7 @@ INSTALLED_APPS = [
     "tinymce",
     "auditlog",
     "rules.apps.AutodiscoverRulesConfig",
-    "cases",
+    "cases.apps.CasesConfig",
     "nesq",
 ]
 
@@ -225,26 +225,8 @@ The cases endpoint supports:
 }
 
 # CORS
-CORS_ALLOW_ALL_ORIGINS = False
-CORS_ALLOWED_ORIGINS = [
-    "http://localhost:8080",
-    "http://127.0.0.1:8080",
-    "https://jawafdehi.org",
-    "https://beta.jawafdehi.org",
-]
-CORS_ALLOW_METHODS = ["GET", "HEAD", "OPTIONS", "POST", "PUT", "PATCH", "DELETE"]
-CORS_ALLOW_HEADERS = [
-    "accept",
-    "accept-encoding",
-    "authorization",
-    "content-type",
-    "dnt",
-    "origin",
-    "user-agent",
-    "x-csrftoken",
-    "x-requested-with",
-]
-CORS_ALLOW_CREDENTIALS = True
+CORS_ALLOW_ALL_ORIGINS = True
+CORS_ALLOW_METHODS = ["GET", "HEAD", "OPTIONS"]
 
 # NES API Configuration
 NES_API_URL = os.getenv("NES_API_URL", "https://nes.newnepal.org/api")

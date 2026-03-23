@@ -84,6 +84,7 @@ class Migration(migrations.Migration):
                     models.TextField(
                         blank=True,
                         default="",
+                        max_length=500,
                         help_text="Optional notes about this relationship",
                     ),
                 ),

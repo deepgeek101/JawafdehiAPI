@@ -12,7 +12,7 @@ from django.contrib.contenttypes.models import ContentType
 from django.test import RequestFactory
 from hypothesis import settings as hypothesis_settings
 
-from cases.models import Case, JawafEntity, DocumentSource
+from cases.models import Case, CaseEntityRelationship, JawafEntity, DocumentSource, RelationshipType
 
 User = get_user_model()
 
@@ -111,11 +111,27 @@ def create_case_with_entities(**kwargs):
     # Create the case without entities
     case = Case.objects.create(**kwargs)
 
-    # Add entities using set()
-    if alleged_entity_ids:
-        case.alleged_entities.set(create_entities_from_ids(alleged_entity_ids))
-    if related_entity_ids:
-        case.related_entities.set(create_entities_from_ids(related_entity_ids))
+    # Convert entity IDs to JawafEntity objects
+    alleged_entities = create_entities_from_ids(alleged_entity_ids)
+    related_entities = create_entities_from_ids(related_entity_ids)
+
+    # Create CaseEntityRelationship records for alleged entities
+    for entity in alleged_entities:
+        CaseEntityRelationship.objects.get_or_create(
+            case=case,
+            entity=entity,
+            relationship_type=RelationshipType.ALLEGED
+        )
+
+    # Create CaseEntityRelationship records for related entities
+    for entity in related_entities:
+        CaseEntityRelationship.objects.get_or_create(
+            case=case,
+            entity=entity,
+            relationship_type=RelationshipType.RELATED
+        )
+
+    # Keep locations separate (not unified in this PR)
     if location_ids:
         case.locations.set(create_entities_from_ids(location_ids))
 

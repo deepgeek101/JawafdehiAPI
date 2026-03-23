@@ -88,32 +88,52 @@ def migrate_existing_relationships(apps, schema_editor):
 
 def reverse_migration(apps, schema_editor):
     """
-    Reverse migration: Remove all CaseEntityRelationship records that were
+    Reverse migration: Remove CaseEntityRelationship records that were
     created from the original alleged_entities and related_entities fields.
 
-    This only removes relationships with type 'alleged' or 'related' to avoid
-    removing any manually created relationships with other types.
+    ROLLBACK-SAFE: Only deletes relationships with:
+    - relationship_type in ('alleged', 'related') AND
+    - notes = '' (empty notes indicates migrated data)
+
+    This preserves manually created relationships that have notes or other types.
     """
     CaseEntityRelationship = apps.get_model("cases", "CaseEntityRelationship")
 
     # Count relationships before deletion
-    alleged_count = CaseEntityRelationship.objects.filter(
+    alleged_migrated = CaseEntityRelationship.objects.filter(
+        relationship_type="alleged", notes=""
+    ).count()
+
+    related_migrated = CaseEntityRelationship.objects.filter(
+        relationship_type="related", notes=""
+    ).count()
+
+    # Count manually created relationships that will be preserved
+    alleged_manual = CaseEntityRelationship.objects.filter(
         relationship_type="alleged"
-    ).count()
+    ).exclude(notes="").count()
 
-    related_count = CaseEntityRelationship.objects.filter(
+    related_manual = CaseEntityRelationship.objects.filter(
         relationship_type="related"
+    ).exclude(notes="").count()
+
+    other_types = CaseEntityRelationship.objects.exclude(
+        relationship_type__in=["alleged", "related"]
     ).count()
 
-    # Delete migrated relationships
+    # Delete only migrated relationships (with empty notes)
     deleted_count = CaseEntityRelationship.objects.filter(
-        relationship_type__in=["alleged", "related"]
+        relationship_type__in=["alleged", "related"], notes=""
     ).delete()[0]
 
-    print("Reverse migration completed:")
-    print(f"  - Alleged relationships removed: {alleged_count}")
-    print(f"  - Related relationships removed: {related_count}")
+    print("Reverse migration completed (rollback-safe):")
+    print(f"  - Alleged relationships removed (migrated): {alleged_migrated}")
+    print(f"  - Related relationships removed (migrated): {related_migrated}")
     print(f"  - Total relationships removed: {deleted_count}")
+    print(f"  - Alleged relationships preserved (manual): {alleged_manual}")
+    print(f"  - Related relationships preserved (manual): {related_manual}")
+    print(f"  - Other relationship types preserved: {other_types}")
+    print(f"  - Total relationships preserved: {alleged_manual + related_manual + other_types}")
 
 
 class Migration(migrations.Migration):

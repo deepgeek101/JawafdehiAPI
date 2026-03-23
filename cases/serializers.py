@@ -143,7 +143,7 @@ class SimplifiedEntitySerializer(serializers.ModelSerializer):
     """
     Simplified serializer for entities in case responses.
 
-    Returns only id, nes_id, display_name, type (relationship_type), and notes.
+    Returns only id, nes_id, display_name, relation_type, and notes.
     Used for the new unified entities format.
 
     CRITICAL FIX: The 'id' field now properly maps to 'entity.id' instead of
@@ -165,7 +165,7 @@ class SimplifiedEntitySerializer(serializers.ModelSerializer):
         read_only=True,
         help_text="Display name of the related entity",
     )
-    type = serializers.CharField(
+    relation_type = serializers.CharField(
         source="relationship_type",
         read_only=True,
         help_text="Type of relationship (alleged, related, witness, etc.)",
@@ -173,7 +173,7 @@ class SimplifiedEntitySerializer(serializers.ModelSerializer):
 
     class Meta:
         model = CaseEntityRelationship
-        fields = ["id", "nes_id", "display_name", "type", "notes"]
+        fields = ["id", "nes_id", "display_name", "relation_type", "notes"]
         read_only_fields = fields
 
 
@@ -200,33 +200,37 @@ class CaseSerializer(serializers.ModelSerializer):
 
     The state field is always included to indicate case status (PUBLISHED or IN_REVIEW).
 
-    Uses the unified entities field for non-location entities and a separate locations field
-    for location entities, both using the unified relationship system for consistency.
+    Uses the unified entities field for entity relationships and a separate locations field
+    for location entities (sourced from Case.locations M2M field only).
 
-    SCHEMA FIX: Removed legacy alleged_entities and related_entities fields to eliminate
-    schema discrepancy. The API now returns only the unified format as documented.
+    For backward compatibility, also provides alleged_entities and related_entities fields
+    derived from the unified relationship system.
     """
 
-    # Non-location entities using unified system
+    # Entity relationships using unified system
     entities = serializers.SerializerMethodField(
-        help_text="Non-location entity relationships using the unified relationship system"
+        help_text="Entity relationships using the unified relationship system"
     )
 
-    # Location entities using unified system but separate field for UI semantics
+    # Legacy fields for backward compatibility (derived from unified system)
+    alleged_entities = serializers.SerializerMethodField(
+        help_text="Entities with 'alleged' relationship type (backward compatibility)"
+    )
+    related_entities = serializers.SerializerMethodField(
+        help_text="Entities with 'related' relationship type (backward compatibility)"
+    )
+
+    # Location entities from Case.locations M2M field
     locations = serializers.SerializerMethodField(
-        help_text="Location entity relationships using the unified relationship system"
+        help_text="Location entities from Case.locations M2M field"
     )
 
     @extend_schema_field(SimplifiedEntitySerializer(many=True))
     def get_entities(self, obj):
-        """Get non-location entities from unified relationship system."""
+        """Get all entities from unified relationship system."""
         try:
-            non_location_relationships = obj.entity_relationships.exclude(
-                entity__nes_id__startswith="entity:location/"
-            ).select_related("entity")
-            return SimplifiedEntitySerializer(
-                non_location_relationships, many=True
-            ).data
+            entity_relationships = obj.entity_relationships.select_related("entity")
+            return SimplifiedEntitySerializer(entity_relationships, many=True).data
         except (ValueError, TypeError, AttributeError) as e:
             # Log serialization errors and re-raise to surface to callers
             logger.error(
@@ -236,24 +240,43 @@ class CaseSerializer(serializers.ModelSerializer):
             )
             raise
 
+    @extend_schema_field(JawafEntitySerializer(many=True))
+    def get_alleged_entities(self, obj):
+        """Get entities with 'alleged' relationship type for backward compatibility."""
+        from .models import RelationshipType
+
+        try:
+            entities = obj.get_entities_by_type(RelationshipType.ALLEGED)
+            return JawafEntitySerializer(entities, many=True).data
+        except (ValueError, TypeError, AttributeError) as e:
+            logger.error(
+                f"Error serializing alleged_entities for case {obj.case_id}: {e}",
+                exc_info=True,
+                extra={"case_id": obj.case_id},
+            )
+            raise
+
+    @extend_schema_field(JawafEntitySerializer(many=True))
+    def get_related_entities(self, obj):
+        """Get entities with 'related' relationship type for backward compatibility."""
+        from .models import RelationshipType
+
+        try:
+            entities = obj.get_entities_by_type(RelationshipType.RELATED)
+            return JawafEntitySerializer(entities, many=True).data
+        except (ValueError, TypeError, AttributeError) as e:
+            logger.error(
+                f"Error serializing related_entities for case {obj.case_id}: {e}",
+                exc_info=True,
+                extra={"case_id": obj.case_id},
+            )
+            raise
+
     @extend_schema_field(LocationSerializer(many=True))
     def get_locations(self, obj):
-        """Get location entities from both legacy M2M field and entity_relationships."""
+        """Get location entities from Case.locations M2M field only."""
         try:
-            # Get locations from legacy M2M field
-            legacy_locations = set(obj.locations.all())
-
-            # Get locations from entity_relationships
-            location_relationships = obj.entity_relationships.filter(
-                entity__nes_id__startswith="entity:location/"
-            ).select_related("entity")
-
-            # Combine and deduplicate location entities
-            unified_locations = legacy_locations | {
-                rel.entity for rel in location_relationships
-            }
-
-            return LocationSerializer(list(unified_locations), many=True).data
+            return LocationSerializer(obj.locations.all(), many=True).data
         except (ValueError, TypeError, AttributeError) as e:
             # Log serialization errors and re-raise to surface to callers
             logger.error(
@@ -302,6 +325,8 @@ class CaseSerializer(serializers.ModelSerializer):
             "case_start_date",
             "case_end_date",
             "entities",  # Non-location entities using unified system
+            "alleged_entities",  # Legacy field for backward compatibility
+            "related_entities",  # Legacy field for backward compatibility
             "locations",  # Location entities using unified system (separate for UI semantics)
             "tags",
             "description",
